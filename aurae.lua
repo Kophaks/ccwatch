@@ -7,7 +7,6 @@ do
 		_M[event](this)
 	end)
 	for _, event in {
-		'ADDON_LOADED',
 		'UNIT_COMBAT',
 		'CHAT_MSG_COMBAT_HONOR_GAIN', 'CHAT_MSG_COMBAT_HOSTILE_DEATH', 'PLAYER_REGEN_ENABLED',
 		'CHAT_MSG_SPELL_AURA_GONE_OTHER', 'CHAT_MSG_SPELL_BREAK_AURA',
@@ -419,29 +418,6 @@ end
 CreateFrame'Frame':SetScript('OnUpdate', function()
 	UpdateTimers()
 end)
-
-do
-	local defaultSettings = {
-		invert = false,
-		growth = 'up',
-		scale = 1,
-		alpha = .85,
-		arcanist = false,
-	}
-
-	function ADDON_LOADED()
-		if arg1 ~= 'aurae' then return end
-
-		for k, v in defaultSettings do
-			if aurae_settings[k] == nil then
-				aurae_settings[k] = v
-			end
-		end
-
-		_G.SLASH_AURAE1 = '/aurae'
-		SlashCmdList.AURAE = SlashCommandHandler
-	end
-end
 
 do
 	local function rank(i, j)
