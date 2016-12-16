@@ -11,17 +11,13 @@ do
 		'UNIT_COMBAT',
 		'CHAT_MSG_COMBAT_HONOR_GAIN', 'CHAT_MSG_COMBAT_HOSTILE_DEATH', 'PLAYER_REGEN_ENABLED',
 		'CHAT_MSG_SPELL_AURA_GONE_OTHER', 'CHAT_MSG_SPELL_BREAK_AURA',
-		'CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS', 'CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_DAMAGE',
+		'CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_DAMAGE', 'CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS',
 		'SPELLCAST_STOP', 'SPELLCAST_INTERRUPTED', 'CHAT_MSG_SPELL_SELF_DAMAGE', 'CHAT_MSG_SPELL_FAILED_LOCALPLAYER',
 		'PLAYER_TARGET_CHANGED', 'UPDATE_BATTLEFIELD_SCORE',
 	} do f:RegisterEvent(event) end
 end
 
 CreateFrame('GameTooltip', 'aurae_Tooltip', nil, 'GameTooltipTemplate')
-
-function Print(msg)
-	DEFAULT_CHAT_FRAME:AddMessage('<aurae> ' .. msg)
-end
 
 _G.aurae_settings = {}
 
@@ -68,180 +64,16 @@ local DR_CLASS = {
 	["Frost Shock"] = 11,
 }
 
-local BARS, timers, pending = {}, {}, {}
-
-function CreateBar()
-	local texture = [[Interface\Addons\aurae\bar]]
-	local font, _, style = GameFontHighlight:GetFont()
-	local fontsize = 11
-
-	local f = CreateFrame('Frame', nil, UIParent)
-
-	f.fadetime = .5
-
-	f:SetHeight(HEIGHT)
-
-	f.icon = f:CreateTexture()
-	f.icon:SetWidth(HEIGHT)
-	f.icon:SetPoint('TOPLEFT', 0, 0)
-	f.icon:SetPoint('BOTTOMLEFT', 0, 0)
-	f.icon:SetTexture[[Interface\Icons\INV_Misc_QuestionMark]]
-	f.icon:SetTexCoord(.08, .92, .08, .92)
-
-	f.statusbar = CreateFrame('StatusBar', nil, f)
-	f.statusbar:SetPoint('TOPLEFT', f.icon, 'TOPRIGHT', 0, 0)
-	f.statusbar:SetPoint('BOTTOMRIGHT', 0, 0)
-	f.statusbar:SetStatusBarTexture(texture)
-	f.statusbar:SetStatusBarColor(.5, .5, .5, 1)
-	f.statusbar:SetMinMaxValues(0, 1)
-	f.statusbar:SetValue(1)
-	f.statusbar:SetBackdrop{bgFile=texture}
-	f.statusbar:SetBackdropColor(.5, .5, .5, .3)
-
-	f.spark = f.statusbar:CreateTexture(nil, 'OVERLAY')
-	f.spark:SetTexture[[Interface\CastingBar\UI-CastingBar-Spark]]
-	f.spark:SetWidth(16)
-	f.spark:SetHeight(HEIGHT + 25)
-	f.spark:SetBlendMode'ADD'
-
-	f.text = f.statusbar:CreateFontString(nil, 'OVERLAY')
---	f.text:SetFontObject(GameFontHighlightSmallOutline)
-	f.text:SetFontObject(GameFontHighlight)
-	f.text:SetFont(font, fontsize, style)
-	f.text:SetPoint('TOPLEFT', 2, 0)
-	f.text:SetPoint('BOTTOMRIGHT', -2, 0)
-	f.text:SetJustifyH'LEFT'
-	f.text:SetText''
-
-	f.timertext = f.statusbar:CreateFontString(nil, 'OVERLAY')
---	f.text:SetFontObject(GameFontHighlightSmallOutline)
-	f.timertext:SetFontObject(GameFontHighlight)
-	f.timertext:SetFont(font, fontsize, style)
-	f.timertext:SetPoint('TOPLEFT', 2, 0)
-	f.timertext:SetPoint('BOTTOMRIGHT', -2, 0)
-	f.timertext:SetJustifyH'RIGHT'
-	f.timertext:SetText''
-
-	return f
-end
-
-function FadeBar(bar)
-	if bar.fadeelapsed > bar.fadetime then
-		bar:SetAlpha(0)
-	else
-		local t = bar.fadetime - bar.fadeelapsed
-		local a = t / bar.fadetime * aurae_settings.alpha
-		bar:SetAlpha(a)
-	end
-end
-
-function UpdateBars()
-	for i = 1, MAXBARS do
-		UpdateBar(BARS[i])
-	end
-end
+local timers = {}
 
 do
-	local function formatTime(t)
-		local h = floor(t / 3600)
-		local m = floor((t - h * 3600) / 60)
-		local s = t - (h * 3600 + m * 60)
-		if h > 0 then
-			return format('%d:%02d:02d', h, m, s)
-		elseif m > 0 then
-			return format('%d:%02d', m, s)
-		elseif s < 10 then
-			return format('%.1f', s)
-		else
-			return format('%.0f', s)
-		end
-	end
-
-	function UpdateBar(bar)
-		if not LOCKED then
-			return
-		end
-
-		local timer = bar.TIMER
-
-		if timer.stopped then
-			if bar:GetAlpha() > 0 then
-				bar.spark:Hide()
-				bar.fadeelapsed = GetTime() - timer.stopped
-				FadeBar(bar)
-			end
-		else
-			bar:SetAlpha(aurae_settings.alpha)
-			bar.icon:SetTexture([[Interface\Icons\]] .. (aurae_EFFECTS[timer.EFFECT].ICON or 'INV_Misc_QuestionMark'))
-			bar.text:SetText(gsub(timer.UNIT, ':.*', ''))
-
-			local fraction
-			if timer.START then
-				local duration = timer.END - timer.START
-				local remaining = timer.END - GetTime()
-				fraction = remaining / duration
-
-				local invert = aurae_settings.invert and not timer.DR
-				
-				bar.statusbar:SetValue( invert and 1 - fraction or fraction)
-
-				local sparkPosition = WIDTH * fraction
-				bar.spark:Show()
-				bar.spark:SetPoint('CENTER', bar.statusbar, invert and 'RIGHT' or 'LEFT', invert and -sparkPosition or sparkPosition, 0)
-
-				bar.timertext:SetText(formatTime(remaining))
-			else
-				fraction = 1
-				bar.statusbar:SetValue(1)
-				bar.spark:Hide()
-				bar.timertext:SetText()
-			end
-			local r, g, b
-			if timer.DR == 1 then
-				r, g, b = 1, 1, .3
-			elseif timer.DR == 2 then
-				r, g, b = 1, .6, 0
-			elseif timer.DR == 3 then
-				r, g, b = 1, .3, .3
-			else
-				r, g, b = .3, 1, .3
-			end
-			bar.statusbar:SetStatusBarColor(r, g, b)
-			bar.statusbar:SetBackdropColor(r, g, b, .3)
-		end
-	end
-end
-
-function UnlockBars()
-	LOCKED = false
-	BARS:EnableMouse(1)
-	for i = 1, MAXBARS do
-		local f = BARS[i]
-		f:SetAlpha(aurae_settings.alpha)
-		f.statusbar:SetStatusBarColor(1, 1, 1)
-		f.statusbar:SetValue(1)
-		f.icon:SetTexture[[Interface\Icons\INV_Misc_QuestionMark]]
-		f.text:SetText('aurae bar')
-		f.timertext:SetText((aurae_settings.growth == 'up' and i or MAXBARS - i + 1))
-		f.spark:Hide()
-	end
-end
-
-function LockBars()
-	LOCKED = true
-	BARS:EnableMouse(0)
-	for i = 1, MAXBARS do
-		BARS[i]:SetAlpha(0)
-	end
-end
-
-do
-	local factor = {1/2, 1/4, 0}
+	local factor = {1, 1/2, 1/4, 0}
 
 	function DiminishedDuration(unit, effect, full_duration)
 		local class = DR_CLASS[effect]
-		if class and timers[class .. '@' .. unit] then
-			return full_duration * factor[timers[class .. '@' .. unit].DR or 1]
+		if class then
+			StartDR(effect, unit)
+			return full_duration * factor[timers[class .. '@' .. unit].DR]
 		else
 			return full_duration
 		end
@@ -260,14 +92,17 @@ function UnitDebuffs(unit)
 	return debuffs
 end
 
+function SetActionRank(name, rank)
+	local _, _, rank = strfind(rank or '', 'Rank (%d+)')
+	if rank and aurae_RANKS[name] then
+		aurae_EFFECTS[aurae_RANKS[name].EFFECT or name].DURATION = aurae_RANKS[name].DURATION[tonumber(rank)]
+	end
+end
+
 do
 	local casting = {}
 	local last_cast
-
-	local function extractRank(str)
-		local _, _, rank = strfind(str or '', 'Rank (%d+)')
-		return tonumber(rank)
-	end
+	local pending = {}
 
 	do
 		local orig = UseAction
@@ -277,7 +112,8 @@ do
 				aurae_TooltipTextRight1:SetText()
 				aurae_Tooltip:SetAction(slot)
 				local name = aurae_TooltipTextLeft1:GetText()
-				casting[name] = {unit=TARGET_ID, rank=extractRank(aurae_TooltipTextRight1:GetText())}
+				casting[name] = TARGET
+				SetActionRank(name, aurae_TooltipTextRight1:GetText())
 			end
 			return orig(slot, clicked, onself)
 		end
@@ -286,8 +122,9 @@ do
 	do
 		local orig = CastSpell
 		function _G.CastSpell(index, booktype)
-			local name, rankText = GetSpellName(index, booktype)
-			casting[name] = {unit=TARGET_ID, rank=extractRank(rankText)}
+			local name, rank = GetSpellName(index, booktype)
+			casting[name] = TARGET
+			SetActionRank(name, rank)
 			return orig(index, booktype)
 		end
 	end
@@ -296,7 +133,7 @@ do
 		local orig = CastSpellByName
 		function _G.CastSpellByName(text, onself)
 			if not onself then
-				casting[text] = {unit=TARGET_ID}
+				casting[text] = TARGET
 			end
 			return orig(text, onself)
 		end
@@ -309,90 +146,72 @@ do
 	end
 
 	function SPELLCAST_STOP()
-		for action, info in casting do
+		for action, target in casting do
 			if aurae_ACTIONS[action] then
 				local effect = aurae_ACTIONS[action] == true and action or aurae_ACTIONS[action]
-				if pending[effect] then
-					last_cast = nil
-				else
-					local duration
-					if info.rank and aurae_RANKS[effect] then
-						duration = aurae_RANKS[effect].DURATION[info.rank]
+				if EffectActive(effect, target) then
+					if pending[effect] then
+						last_cast = nil
 					else
-						duration = aurae_EFFECTS[effect].DURATION
+						pending[effect] = {target=target, time=GetTime() + (aurae_DELAYS[effect] or 0)}
+						last_cast = effect
 					end
-					if aurae_COMBO[effect] then
-						duration = duration + aurae_COMBO[effect] * COMBO
-					end
-					if bonuses[effect] then
-						duration = duration + bonuses[effect](duration)
-					end
-					if IsPlayer(info.unit) then
-						duration = DiminishedDuration(info.unit, effect, aurae_PVP_DURATION[effect] or duration)
-					end
-
-					info.duration = duration
-					info.time = GetTime() + (aurae_DELAYS[effect] or 0)
-					pending[effect] = info
-					last_cast = effect
 				end
 			end
 		end
 		casting = {}
 	end
-end
 
-CreateFrame'Frame':SetScript('OnUpdate', function()
-	for effect, info in pending do
-		if GetTime() >= info.time + .5 then
-			if (IsPlayer(info.unit) or TARGET_ID ~= info.unit or UnitDebuffs'target'[effect]) then
-				StartTimer(effect, info.unit, info.time, info.duration)
-			end
-			pending[effect] = nil
-		end
-	end
-end)
-
-function SPELLCAST_INTERRUPTED()
-	if last_cast then
-		pending[last_cast] = nil
-	end
-end
-
-do
-	local patterns = {
-		'is immune to your (.*)%.',
-		'Your (.*) missed',
-		'Your (.*) was resisted',
-		'Your (.*) was evaded',
-		'Your (.*) was dodged',
-		'Your (.*) was deflected',
-		'Your (.*) is reflected',
-		'Your (.*) is parried'
-	}
-	function CHAT_MSG_SPELL_SELF_DAMAGE()
-		for _, pattern in patterns do
-			local _, _, effect = strfind(arg1, pattern)
-			if effect then
+	CreateFrame'Frame':SetScript('OnUpdate', function()
+		for effect, info in pending do
+			if GetTime() >= info.time + .5 then
+				StartTimer(effect, info.target, info.time)
 				pending[effect] = nil
-				return
+			end
+		end
+	end)
+
+	function AbortCast(effect, unit)
+		for k, v in pending do
+			if k == effect and v.target == unit then
+				pending[k] = nil
 			end
 		end
 	end
-end
 
-function AbortCast(effect, unit)
-	for k, v in pending do
-		if k == effect and v.unit == unit then
-			pending[k] = nil
+	function AbortUnitCasts(unit)
+		for k, v in pending do
+			if v.target == unit or not unit and not IsPlayer(v.target) then
+				pending[k] = nil
+			end
 		end
 	end
-end
 
-function AbortUnitCasts(unit)
-	for k, v in pending do
-		if v.unit == unit or not unit and not IsPlayer(v.unit) then
-			pending[k] = nil
+	function SPELLCAST_INTERRUPTED()
+		if last_cast then
+			pending[last_cast] = nil
+		end
+	end
+
+	do
+		local patterns = {
+			'is immune to your (.*)%.',
+			'Your (.*) missed',
+			'Your (.*) was resisted',
+			'Your (.*) was evaded',
+			'Your (.*) was dodged',
+			'Your (.*) was deflected',
+			'Your (.*) is reflected',
+			'Your (.*) is parried'
+		}
+		function CHAT_MSG_SPELL_SELF_DAMAGE()
+			for _, pattern in patterns do
+				local _, _, effect = strfind(arg1, pattern)
+				if effect then
+					pending[effect] = nil
+					return
+				end
+			end
 		end
 	end
 end
@@ -432,7 +251,7 @@ function AuraGone(unit, effect)
 			end
 		elseif unit == UnitName'target' then
 			-- TODO pet target (in other places too)
-			local unit = TARGET_ID
+			local unit = TARGET
 			local debuffs = UnitDebuffs'target'
 			for k, timer in timers do
 				if timer.UNIT == unit and not debuffs[timer.EFFECT] then
@@ -448,7 +267,7 @@ function CHAT_MSG_COMBAT_HOSTILE_DEATH()
 		if IsPlayer(unit) then
 			UnitDied(unit)
 		elseif unit == UnitName'target' and UnitIsDead'target' then
-			UnitDied(TARGET_ID)
+			UnitDied(TARGET)
 		end
 	end
 end
@@ -462,21 +281,6 @@ end
 function UNIT_COMBAT()
 	if GetComboPoints() > 0 then
 		COMBO = GetComboPoints()
-	end
-end
-
-function PlaceTimers()
-	for _, timer in timers do
-		if not timer.visible then
-			local up = aurae_settings.growth == 'up'
-			for i = (up and 1 or MAXBARS), (up and MAXBARS or 1), (up and 1 or -1) do
-				if BARS[i].TIMER.stopped then
-					BARS[i].TIMER = timer
-					timer.visible = true
-					break
-				end
-			end
-		end
 	end
 end
 
@@ -496,7 +300,7 @@ function EffectActive(effect, unit)
 	return timers[effect .. '@' .. unit] and true or false
 end
 
-function StartTimer(effect, unit, start, duration)
+function StartTimer(effect, unit, start)
 	local key = effect .. '@' .. unit
 	local timer = timers[key] or {}
 	timers[key] = timer
@@ -504,14 +308,25 @@ function StartTimer(effect, unit, start, duration)
 	timer.EFFECT = effect
 	timer.UNIT = unit
 	timer.START = start
-	timer.END = timer.END and max(timer.END, timer.START + duration) or timer.START + duration
+	timer.END = timer.START
 
-	if IsPlayer(unit) and DR_CLASS[effect] then
-		StartDR(effect, unit)
+	local duration = aurae_EFFECTS[effect].DURATION
+
+	if aurae_COMBO[effect] then
+		duration = duration + aurae_COMBO[effect] * COMBO
+	end
+
+	if bonuses[effect] then
+		duration = duration + bonuses[effect](duration)
+	end
+
+	if IsPlayer(unit) then
+		timer.END = timer.END + DiminishedDuration(unit, effect, aurae_PVP_DURATION[effect] or duration)
+	else
+		timer.END = timer.END + duration
 	end
 
 	timer.stopped = nil
-	PlaceTimers()
 end
 
 function StartDR(effect, unit)
@@ -527,8 +342,6 @@ function StartDR(effect, unit)
 		timer.START = nil
 		timer.END = nil
 		timer.DR = min(3, (timer.DR or 0) + 1)
-
-		PlaceTimers()
 	end
 end
 
@@ -576,18 +389,24 @@ do
 	function CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_DAMAGE()
 		if player[hostilePlayer(arg1)] == nil then player[hostilePlayer(arg1)] = true end -- wrong for pets
 		for unit, effect in string.gfind(arg1, '(.+) is afflicted by (.+)%.') do
-			if IsPlayer(unit) and pending[effect] and pending[effect].unit == unit then
-				StartTimer(effect, unit, GetTime(), pending[effect].duration)
-				pending[effect] = nil
+			if aurae_EFFECTS[effect] then
+				StartTimer(effect, unit, GetTime())
 			end
 		end
 	end
 
-	function PLAYER_TARGET_CHANGED()
-		local unit = UnitName'target'
-		TARGET_ID = unit and (UnitIsPlayer'target' and unit or unit .. ':' .. UnitLevel'target' .. ':' .. UnitSex'target')
-		if unit then
-			player[unit] = UnitIsPlayer'target' and true or false
+	do
+		local current
+		function PLAYER_TARGET_CHANGED()
+			local unit = UnitName'target'
+			TARGET = unit
+			if unit then
+				player[unit] = UnitIsPlayer'target' and true or false
+				if current and player[current] then
+					addRecent(current)
+				end
+				current = unit
+			end
 		end
 	end
 
@@ -604,10 +423,6 @@ end
 
 CreateFrame'Frame':SetScript('OnUpdate', function()
 	UpdateTimers()
-	if not LOCKED then
-		return
-	end
-	UpdateBars()
 end)
 
 do
@@ -627,110 +442,10 @@ do
 				aurae_settings[k] = v
 			end
 		end
-		
-		local dummyTimer = {stopped=0}
-		local height = HEIGHT * MAXBARS + 4 * (MAXBARS - 1)
-		BARS = CreateFrame('Frame', 'aurae', UIParent)
-		BARS:SetWidth(WIDTH + HEIGHT)
-		BARS:SetHeight(height)
-		BARS:SetMovable(true)
-		BARS:SetUserPlaced(true)
-		BARS:SetClampedToScreen(true)
-		BARS:RegisterForDrag('LeftButton')
-		BARS:SetScript('OnDragStart', function()
-			this:StartMoving()
-		end)
-		BARS:SetScript('OnDragStop', function()
-			this:StopMovingOrSizing()
-		end)
-		BARS:SetPoint('CENTER', 0, 150)
-		for i = 1, MAXBARS do
-			local bar = CreateBar()
-			bar:SetParent(BARS)
-			bar:SetAlpha(aurae_settings.alpha)
-			local offset = 20 * (i - 1)
-			bar:SetPoint('BOTTOMLEFT', 0, offset)
-			bar:SetPoint('BOTTOMRIGHT', 0, offset)
-			bar.TIMER = dummyTimer
-			tinsert(BARS, bar)
-		end
-
-		BARS:SetScale(aurae_settings.scale)
 
 		_G.SLASH_AURAE1 = '/aurae'
 		SlashCmdList.AURAE = SlashCommandHandler
-
-		LockBars()
 	end
-
-	Print('aurae loaded - /aurae')
-end
-
-do
-	local function tokenize(str)
-		local tokens = {}
-		for token in string.gfind(str, '%S+') do tinsert(tokens, token) end
-		return tokens
-	end
-
-	function SlashCommandHandler(msg)
-		if msg then
-			local args = tokenize(msg)
-			local command = strlower(msg)
-			if command == 'unlock' then
-				UnlockBars()
-				Print('Bars unlocked.')
-			elseif command == 'lock' then
-				LockBars()
-				Print('Bars locked.')
-			elseif command == 'invert' then
-				aurae_settings.invert = not aurae_settings.invert
-				Print('Bar inversion ' .. (aurae_settings.invert and 'on.' or 'off.'))
-			elseif args[1] == 'growth' and (args[2] == 'up' or args[2] == 'down') then
-				aurae_settings.growth = args[2]
-				Print('Growth: ' .. args[2])
-				if not LOCKED then UnlockBars() end
-			elseif strsub(command, 1, 5) == 'scale' then
-				local scale = tonumber(strsub(command, 7))
-				if scale then
-					scale = max(.5, min(3, scale))
-					aurae_settings.scale = scale
-					BARS:SetScale(scale)
-					Print('Scale: ' .. scale)
-				else
-					Usage()
-				end
-			elseif strsub(command, 1, 5) == 'alpha' then
-				local alpha = tonumber(strsub(command, 7))
-				if alpha then
-					alpha = max(0, min(1, alpha))
-					aurae_settings.alpha = alpha
-					if not LOCKED then UnlockBars() end
-					Print('Alpha: ' .. alpha)
-				else
-					Usage()
-				end
-			elseif command == 'clear' then
-				aurae_settings = nil
-				LoadVariables()
-			elseif command == 'arcanist' then
-				aurae_settings.arcanist = not aurae_settings.arcanist
-				Print('Arcanist ' .. (aurae_settings.arcanist and 'on.' or 'off.'))
-			else
-				Usage()
-			end
-		end
-	end
-end
-
-function Usage()
-	Print("Usage:")
-	Print("  lock | unlock")
-	Print("  invert")
-	Print("  growth (up | down)")
-	Print("  scale [0.5,3]")
-	Print("  alpha [0,1]")
-	Print("  arcanist")
 end
 
 do
