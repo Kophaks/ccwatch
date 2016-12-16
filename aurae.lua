@@ -358,7 +358,6 @@ function StopTimer(key)
 	if timers[key] then
 		timers[key].stopped = GetTime()
 		timers[key] = nil
-		PlaceTimers()
 	end
 end
 
@@ -369,7 +368,6 @@ function UnitDied(unit)
 			StopTimer(k)
 		end
 	end
-	PlaceTimers()
 end
 
 CreateFrame'Frame':SetScript('OnUpdate', RequestBattlefieldScoreData)
