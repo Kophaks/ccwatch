@@ -400,9 +400,6 @@ do
 			TARGET = unit
 			if unit then
 				player[unit] = UnitIsPlayer'target' and true or false
-				if current and player[current] then
-					addRecent(current)
-				end
 				current = unit
 			end
 		end
