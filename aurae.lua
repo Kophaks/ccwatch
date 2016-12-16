@@ -20,10 +20,6 @@ CreateFrame('GameTooltip', 'aurae_Tooltip', nil, 'GameTooltipTemplate')
 
 _G.aurae_settings = {}
 
-local WIDTH = 170
-local HEIGHT = 16
-local MAXBARS = 11
-
 local COMBO = 0
 
 local DR_CLASS = {
