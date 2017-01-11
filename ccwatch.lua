@@ -225,7 +225,7 @@ function TargetDebuffs()
 end
 
 do
-	local action, last_action
+	local action, last_effect
 
 	local function startAction(name, rank)
 		if not action and TARGET_ID then
@@ -261,6 +261,28 @@ do
 	end
 
 	do
+		local orig = UseContainerItem
+		function _G.UseContainerItem(bag, slot)
+			local _, _, name = strfind(GetContainerItemLink(bag, slot), '%[(.*)%]')
+			if name then
+				startAction(name)
+			end
+			return orig(bag, slot)
+		end
+	end
+
+	do
+		local orig = UseInventoryItem
+		function _G.UseInventoryItem(slot)
+			local _, _, name = strfind(GetInventoryItemLink(slot), '%[(.*)%]')
+			if name then
+				startAction(name)
+			end
+			return orig(slot)
+		end
+	end
+
+	do
 		local orig = CastSpellByName
 		function _G.CastSpellByName(text, onself)
 			if not onself then
@@ -281,21 +303,23 @@ do
 
 	function SPELLCAST_STOP()
 		if action then
-			if PENDING[action.name] then
-				last_action = nil
+			local effect = type(ccwatch_ACTION[action.name]) == 'string' and ccwatch_ACTION[action.name] or action.name
+			if PENDING[effect] then
+				last_effect = nil
 			elseif ccwatch_ACTION[action.name] then
 				action.combo = COMBO
 				action.time = GetTime() + (ccwatch_PROJECTILE[action.name] and 1.5 or 0)
-				PENDING[action.name] = action
-				last_action = action.name
+
+				PENDING[effect] = action
+				last_effect = effect
 			end
 		end
 		action = nil
 	end
 
 	function SPELLCAST_INTERRUPTED()
-		if last_action then
-			PENDING[last_action] = nil
+		if last_effect then
+			PENDING[last_effect] = nil
 		end
 	end
 end
