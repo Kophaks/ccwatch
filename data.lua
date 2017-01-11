@@ -172,9 +172,9 @@ ccwatch_GAIN = {
 	["Death Wish"] = true,
 	["Will of the Forsaken"] = true,
 	["Perception"] = true,
-	["Intercept"] = "Intercept Stun"
-	["Tidal Charm"] = true
-	["Magic Dust"] = "Sleep"
+	["Intercept"] = "Intercept Stun",
+	["Tidal Charm"] = true,
+	["Magic Dust"] = "Sleep",
 	["Gnomish Net-o-Matic Projector"] = "Net-o-Matic",
 	["Goblin Rocket Helmet"] = "Reckless Charge",
 }
